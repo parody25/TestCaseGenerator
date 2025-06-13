@@ -1,0 +1,8 @@
+{
+    "sample_user_stories" : [
+        "As a new user, I want to register an account.",
+        "As a new user, I want to register an account by choosing my own username and password.",
+        "As a new user, I want to register an account by choosing my own username and password. The login password should be between 8-16 characters and should contain at least one special character.",
+        "As a new user, I want to register an account by choosing my own username and password. The login password should be between 8-16 characters and should contain at least one special character. Error message \"You have chosen an invalid password format\" should be displayed for if it violates password rules."
+    ]
+}

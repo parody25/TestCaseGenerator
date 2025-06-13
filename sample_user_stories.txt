@@ -1,0 +1,14 @@
+Login:
+As a user, I want an option to stay logged in, so that I don’t have to enter my credentials every time.
+As a user, I want to be able to reset my password if I forget it, so that I can regain access to my account.
+As a user, I want to see an error message if I enter incorrect login details, so that I know when my login attempt has failed.
+
+Registration:
+As a user, I want to log in via my social media accounts, so that I can quickly access the platform without creating a new account.
+As a new user, I want to choose my own username and password during registration, so that I can personalize my login credentials. The login password should be between 8-16 characters and should contain at least one special character.
+As a new user, I want to provide my basic information during registration, such as name and date of birth, so that I can personalize my profile.
+
+As a new user, I want to register an account.
+As a new user, I want to register an account by choosing my own username and password.
+As a new user, I want to register an account by choosing my own username and password. The login password should be between 8-16 characters and should contain at least one special character.
+As a new user, I want to register an account by choosing my own username and password. The login password should be between 8-16 characters and should contain at least one special character. Error message \"You have chosen an invalid password format\" should be displayed for if it violates password rules.
