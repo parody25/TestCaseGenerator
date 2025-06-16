@@ -1,5 +1,5 @@
 import streamlit as st
-#from test_case_generator import test_case_generator
+from brd_reader import brd_reader
 from test_case_generator2 import test_case_generator2
 
 def show_logo():
@@ -8,7 +8,7 @@ def show_logo():
 st.set_page_config(layout="wide")
 st.sidebar.title("Navigation")
 #selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪", "Test Case Generator 2 🧪🧪"])
-selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪🧪"])
+selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪", "BRD Reader 🧪🧪"])
 # Navigation logic
 if selection == "Welcome 🏠":
     show_logo()  # 👈 Add this
@@ -24,6 +24,8 @@ if selection == "Welcome 🏠":
     """)
 # elif selection == "Test Case Generator 🧪":
 #     test_case_generator()
-elif selection == "Test Case Generator 🧪🧪":
+elif selection == "Test Case Generator 🧪":
     test_case_generator2()
+elif selection == "BRD Reader 🧪🧪":
+    brd_reader()
 
