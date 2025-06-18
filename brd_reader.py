@@ -15,7 +15,7 @@ def brd_reader():
     uploaded_file = st.file_uploader("Upload a BRD PDF", type=["pdf"])
 
     if uploaded_file:
-        application_id = st.text_input("Enter Application ID", value="brd-app-001")
+        application_id = st.text_input("Enter Application ID", value="brd-app-008")
 
         if st.button("Generate Test Cases"):
             with st.spinner("🔍 Parsing and embedding your BRD..."):
@@ -85,25 +85,29 @@ def brd_reader():
                     st.code(context[:1500] + "..." if len(context) > 1500 else context)
 
                     prompt = f"""
-You are a senior QA engineer. Read the following BRD content and generate UAT test cases in JSON format.
-
-Include:
-- Positive, negative, and corner-case scenarios
-- Feature-wise organization
-
-JSON Format:
-{{
-  "testCases": [
-    {{
-      "feature": "",
-      "userStory": "",
-      "testScenario": "",
-      "testCaseTitle": "",
-      "expectedResult": "",
-      "testSteps": "1. Step one 2. Step two"
-    }}
-  ]
-}}
+You are a senior QA engineer. Your task is to read and understand the attached Business Requirements Document (BRD) and generate a complete set of test cases for User Acceptance Testing (UAT).
+Please perform the following:
+1) Ingest and analyze the BRD to understand the full scope of the project, including all features, workflows, user roles, and business rules.
+2) Generate test cases that cover:
+- Positive scenarios: Valid inputs and expected successful outcomes.
+- Negative scenarios: Invalid inputs, error handling, and edge cases.
+- Corner cases: Boundary conditions, unusual but valid inputs, and performance-related edge cases.
+3) Organize test cases by feature/module, and include:
+- Test case ID
+- Title/Description
+- Preconditions
+- Test steps
+- Expected results
+- Priority (High/Medium/Low)
+- Type (Positive/Negative/Corner)
+4) Ensure the test cases:
+- Cover all user roles and permissions
+- Validate UI/UX elements if applicable
+- Include integration points with other systems or APIs
+- Reflect business rules and logic
+- Are suitable for manual execution during UAT
+5) Provide a summary table of test coverage by feature/module.
+Format the output in a structured way (e.g., Markdown table or spreadsheet-ready format). Ensure clarity, completeness, and traceability to the BRD
 
 BRD Content:
 \"\"\"{context}\"\"\"
@@ -114,15 +118,16 @@ BRD Content:
                         model="gpt-4o",
                         messages=[
                             {"role": "system", "content": prompt},
-                            {"role": "user", "content": "Generate the test cases in JSON format."}
+                            {"role": "user", "content": "Generate the test cases in elaborate."}
                         ],
-                        max_tokens=5000,
+                        max_tokens=7000,
                         temperature=0.7
                     )
 
                     response = completion.choices[0].message.content.strip()
                     st.subheader("✅ Generated UAT Test Cases")
-                    st.code(response, language="json")
+                    #st.code(response, language="json")
+                    st.code(response)
 
                 except Exception as e:
                     st.error(f"❌ Error during test case generation: {e}")
