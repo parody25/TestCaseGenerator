@@ -1,0 +1,104 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Test Case Schema",
+    "description": "Schema for structured test case output",
+    "type": "object",
+    "properties": {
+      "test_suite": {
+        "type": "object",
+        "properties": {
+          "application_name": {
+            "type": "string",
+            "description": "Name of the application under test"
+          },
+          "brd_reference": {
+            "type": "string",
+            "description": "Reference to the BRD document"
+          },
+          "total_test_cases": {
+            "type": "integer",
+            "description": "Total count of generated test cases"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "feature_name": {
+                  "type": "string",
+                  "description": "Name of the feature/module"
+                },
+                "feature_description": {
+                  "type": "string",
+                  "description": "Brief description of the feature"
+                },
+                "test_cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "test_case_id": {
+                        "type": "string",
+                        "description": "Unique test case identifier"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Test case title"
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "Detailed test case description"
+                      },
+                      "test_type": {
+                        "type": "string",
+                        "enum": ["Positive", "Negative", "Edge Case", "Integration", "Security"],
+                        "description": "Type of test case"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["High", "Medium", "Low"],
+                        "description": "Priority level"
+                      },
+                      "preconditions": {
+                        "type": "string",
+                        "description": "Prerequisites for test execution"
+                      },
+                      "test_steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Step-by-step test instructions"
+                      },
+                      "expected_result": {
+                        "type": "string",
+                        "description": "Expected outcome"
+                      },
+                      "requirements_covered": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "List of BRD requirements covered"
+                      }
+                    },
+                    "required": [
+                      "test_case_id",
+                      "title",
+                      "test_type",
+                      "priority",
+                      "test_steps",
+                      "expected_result"
+                    ]
+                  }
+                }
+              },
+              "required": ["feature_name", "test_cases"]
+            }
+          }
+        },
+        "required": ["application_name", "total_test_cases", "features"]
+      }
+    },
+    "required": ["test_suite"]
+  }

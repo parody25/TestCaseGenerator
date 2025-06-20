@@ -1,14 +1,23 @@
 import streamlit as st
 import os
 import tempfile
-from openai import OpenAI
+import openai
 from llama_parse import LlamaParse
 from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
 from llama_index.core.node_parser import MarkdownElementNodeParser
 from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from dotenv import load_dotenv
+import json
+import pandas as pd
 
 load_dotenv()
+
+def load_json_file(file_path):
+    with open(file_path, 'r') as file:
+        return json.load(file)
+
+TEST_CASE_SCHEMA = load_json_file('test_case_schema.json')
+EXAMPLE_TEST_CASE = load_json_file('example_test_case.json')
 
 def brd_reader():
     st.title("📄 BRD-Based UAT Test Case Generator")
@@ -20,8 +29,7 @@ def brd_reader():
         if st.button("Generate Test Cases"):
             with st.spinner("🔍 Parsing and embedding your BRD..."):
                 file_name = uploaded_file.name
-                print(file_name)
-                file_bytes = uploaded_file.read()  # Make sure this is read only once
+                file_bytes = uploaded_file.read()
                 document_name, ext = os.path.splitext(file_name)
                 ext = ext if ext else ".pdf"
 
@@ -43,8 +51,6 @@ def brd_reader():
                         if not documents:
                             st.error("❌ LlamaParse returned no documents. The BRD may be scanned or empty.")
                             return
-
-                        #st.info(f"📄 Parsed content preview:\n\n{documents[0].get_content()[:1000]}...")
 
                         llm = LlamaOpenAI(model="gpt-4o")
                         parser = MarkdownElementNodeParser(llm=llm, num_workers=10)
@@ -73,8 +79,8 @@ def brd_reader():
                     storage_context = StorageContext.from_defaults(persist_dir=embedding_path)
                     vector_db = load_index_from_storage(storage_context=storage_context)
 
-                    retriever = vector_db.as_retriever(similarity_top_k=20)
-                    query = "What features, workflows, user stories, or rules can be used to generate UAT test cases?"
+                    retriever = vector_db.as_retriever(similarity_top_k=30)
+                    query = "Extract all features, requirements, user stories, workflows, business rules, acceptance criteria, system interactions, and edge cases that should be considered for test case generation. Include both functional and non-functional requirements."
                     docs = retriever.retrieve(query)
                     context = "\n\n".join([doc.text for doc in docs])
 
@@ -82,52 +88,93 @@ def brd_reader():
                     if not context.strip():
                         st.warning("⚠️ No relevant content found from BRD. Please verify document formatting or try a different query.")
                         return
-                    st.code(context[:1500] + "..." if len(context) > 1500 else context)
+                    st.code(context[:2500] + "..." if len(context) > 2500 else context)
+
+                    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+                    tool_schema = {
+                        "name": "generate_test_cases",
+                        "description": "Generate structured UAT test cases based on BRD content",
+                        "parameters": TEST_CASE_SCHEMA
+                    }
 
                     prompt = f"""
-You are a senior QA engineer. Your task is to read and understand the attached Business Requirements Document (BRD) and generate a complete set of test cases for User Acceptance Testing (UAT).
-Please perform the following:
-1) Ingest and analyze the BRD to understand the full scope of the project, including all features, workflows, user roles, and business rules.
-2) Generate test cases that cover:
-- Positive scenarios: Valid inputs and expected successful outcomes.
-- Negative scenarios: Invalid inputs, error handling, and edge cases.
-- Corner cases: Boundary conditions, unusual but valid inputs, and performance-related edge cases.
-3) Organize test cases by feature/module, and include:
-- Test case ID
-- Title/Description
-- Preconditions
-- Test steps
-- Expected results
-- Priority (High/Medium/Low)
-- Type (Positive/Negative/Corner)
-4) Ensure the test cases:
-- Cover all user roles and permissions
-- Validate UI/UX elements if applicable
-- Include integration points with other systems or APIs
-- Reflect business rules and logic
-- Are suitable for manual execution during UAT
-5) Provide a summary table of test coverage by feature/module.
-Format the output in a structured way (e.g., Markdown table or spreadsheet-ready format). Ensure clarity, completeness, and traceability to the BRD
+You are a Senior QA Architect.
 
-BRD Content:
+Generate at least 100 test cases covering:
+- Functional and non-functional requirements
+- Positive, negative, and edge cases
+- Grouped by feature/module
+- Traceable to BRD inputs
+
+Refer to this BRD content:
 \"\"\"{context}\"\"\"
-                    """
+"""
 
-                    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                    completion = openai_client.chat.completions.create(
+                    completion = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": prompt},
-                            {"role": "user", "content": "Generate the test cases in elaborate."}
+                            {"role": "system", "content": "You are a structured test case generation assistant."},
+                            {"role": "user", "content": prompt}
                         ],
-                        max_tokens=7000,
-                        temperature=0.7
+                        tools=[{
+                            "type": "function",
+                            "function": tool_schema
+                        }],
+                        tool_choice={"type": "function", "function": {"name": "generate_test_cases"}},
+                        temperature=0.5
                     )
 
-                    response = completion.choices[0].message.content.strip()
+                    response_json = completion.choices[0].message.tool_calls[0].function.arguments
+                    parsed_output = json.loads(response_json)
+
                     st.subheader("✅ Generated UAT Test Cases")
-                    #st.code(response, language="json")
-                    st.code(response)
+                    st.code(json.dumps(parsed_output, indent=2), language="json")
+
+                    # JSON download button
+                    # st.download_button(
+                    #     label="⬇️ Download JSON",
+                    #     data=json.dumps(parsed_output, indent=2),
+                    #     file_name="uat_test_cases.json",
+                    #     mime="application/json"
+                    # )
+
+                    # Convert to DataFrame for Excel
+                    excel_rows = []
+                    suite = parsed_output["test_suite"]
+                    for feature in suite["features"]:
+                        for case in feature["test_cases"]:
+                            excel_rows.append({
+                                "Application Name": suite.get("application_name", ""),
+                                "BRD Reference": suite.get("brd_reference", ""),
+                                "Feature Name": feature.get("feature_name", ""),
+                                "Feature Description": feature.get("feature_description", ""),
+                                "Test Case ID": case.get("test_case_id", ""),
+                                "Title": case.get("title", ""),
+                                "Description": case.get("description", ""),
+                                "Test Type": case.get("test_type", ""),
+                                "Priority": case.get("priority", ""),
+                                "Preconditions": case.get("preconditions", ""),
+                                "Test Steps": "\n".join(case.get("test_steps", [])),
+                                "Expected Result": case.get("expected_result", ""),
+                                "Requirements Covered": ", ".join(case.get("requirements_covered", []))
+                            })
+
+                    df = pd.DataFrame(excel_rows)
+
+                    # Save Excel to buffer
+                    from io import BytesIO
+                    excel_buffer = BytesIO()
+                    df.to_excel(excel_buffer, index=False, sheet_name="TestCases")
+                    excel_buffer.seek(0)
+
+                    # Excel download button
+                    st.download_button(
+                        label="⬇️ Download Excel",
+                        data=excel_buffer,
+                        file_name="uat_test_cases.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
                 except Exception as e:
                     st.error(f"❌ Error during test case generation: {e}")

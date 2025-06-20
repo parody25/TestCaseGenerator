@@ -1,0 +1,47 @@
+{
+    "test_suite": {
+      "application_name": "Customer Portal",
+      "brd_reference": "BRD-2024-001",
+      "total_test_cases": 3,
+      "features": [
+        {
+          "feature_name": "User Login",
+          "feature_description": "Authentication system for portal access",
+          "test_cases": [
+            {
+              "test_case_id": "TC-LOGIN-001",
+              "title": "Successful login with valid credentials",
+              "description": "Verify user can login with correct username and password",
+              "test_type": "Positive",
+              "priority": "High",
+              "preconditions": "User account exists and is active",
+              "test_steps": [
+                "1. Navigate to login page",
+                "2. Enter valid username",
+                "3. Enter valid password",
+                "4. Click Login button"
+              ],
+              "expected_result": "User is redirected to dashboard page",
+              "requirements_covered": ["REQ-AUTH-001", "REQ-AUTH-002"]
+            },
+            {
+              "test_case_id": "TC-LOGIN-002",
+              "title": "Login attempt with invalid password",
+              "description": "Verify system handles incorrect password appropriately",
+              "test_type": "Negative",
+              "priority": "Medium",
+              "preconditions": "User account exists",
+              "test_steps": [
+                "1. Navigate to login page",
+                "2. Enter valid username",
+                "3. Enter invalid password",
+                "4. Click Login button"
+              ],
+              "expected_result": "System displays 'Invalid credentials' message",
+              "requirements_covered": ["REQ-AUTH-003"]
+            }
+          ]
+        }
+      ]
+    }
+  }
