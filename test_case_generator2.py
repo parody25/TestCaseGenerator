@@ -6,20 +6,17 @@ import pandas as pd
 import json
 from io import BytesIO
 import re
-import fitz  # PyMuPDF for PDF text extraction
 from langchain.llms import Ollama
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.schema import Document
-import tempfile
 
-
+# Load environment variables
 load_dotenv()
 
+# Initialize OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Initialize LLAMA and GPT-4o clients
 llm_llama = Ollama(model="llama3")
 llm_gpt4o = ChatOpenAI(model="gpt-4o")
 
@@ -71,146 +68,140 @@ def process_test_cases_json(test_cases_json):
         st.error("Unexpected JSON format.")
         return []
 
-def preprocess_brd_text_with_vectorstore(brd_text: str, index_path: str = None):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_text(brd_text)
-    docs = [Document(page_content=chunk) for chunk in chunks]
-
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_documents(docs, embeddings)
-
-    if index_path:
-        vectorstore.save_local(index_path)
-    return vectorstore
-
-def retrieve_relevant_brd_sections(vectorstore, query: str, k: int = 20):
-    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k})
-    docs = retriever.get_relevant_documents(query)
-    return "\n\n".join([doc.page_content for doc in docs])
-
-
 def show_logo():
     st.image("Bank_Muscat_logo.png", width=200)
 
 def test_case_generator2():
+    # Page title
     show_logo()
     st.markdown("<h1 style='text-align: center;'>GenAI Testcase Generator</h1>", unsafe_allow_html=True)
-
+    
+    # Model selection
     model_option = st.selectbox("Select a model", ["llama3", "gpt-4o"])
 
-    upload_mode = st.radio("Choose input type", ["Excel User Stories", "BRD PDF"])
-    uploaded_file = None
+    # Check if Excel file is uploaded, if not, provide option to upload
+    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
 
-    if upload_mode == "Excel User Stories":
-        uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
-    elif upload_mode == "BRD PDF":
-        uploaded_file = st.file_uploader("Upload a BRD PDF file", type=["pdf"])
+    # Initialize user stories and features
+    if "test_case_generator" in st.session_state:
+        user_stories_features = st.session_state.test_case_generator
+    else:
+        user_stories_features = []
 
-    user_stories_features = []
-
+    # If Excel file is uploaded, process it
     if uploaded_file:
-        if upload_mode == "Excel User Stories":
-            try:
-                xls = pd.ExcelFile(uploaded_file)
-                sheet_name = st.selectbox("Select sheet", xls.sheet_names)
-                df = pd.read_excel(xls, sheet_name=sheet_name)
-                user_stories_features = [" ".join(row.astype(str).values) for _, row in df.iterrows()]
-                st.session_state.test_case_generator = user_stories_features
-                st.success("Excel file uploaded and processed successfully!")
-            except Exception as e:
-                st.error(f"Error reading the Excel file: {e}")
-        elif upload_mode == "BRD PDF":
-            try:
-                pdf_doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                pdf_text = "\n".join(page.get_text() for page in pdf_doc)
-                user_stories_features = [pdf_text]
-                st.session_state.test_case_generator = user_stories_features
-                st.success("BRD PDF uploaded and text extracted successfully!")
-            except Exception as e:
-                st.error(f"Error processing PDF: {e}")
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            sheet_name = st.selectbox("Select sheet", xls.sheet_names)
+            df = pd.read_excel(xls, sheet_name=sheet_name)  # Use xls object directly
 
-    # st.subheader("Input Content")
-    # if st.session_state.get("test_case_generator"):
-    #     for story in st.session_state.test_case_generator:
-    #         st.write(story[:1000] + "..." if len(story) > 1000 else story)
-    # else:
-        # st.info("Please upload a valid Excel or BRD file.")
+            # Clear existing session state
+            if "test_case_generator" in st.session_state:
+                del st.session_state.test_case_generator
 
-    if st.session_state.get("test_case_generator"):
-        additional_context = st.text_area("Enter additional context (optional)", key="additional_context")
+            user_stories_features = []  # Clear the local list as well
 
+            # Concatenate all text from all columns into a single string for each row
+            for index, row in df.iterrows():
+                concatenated_story = " ".join(row.astype(str).values)
+                user_stories_features.append(concatenated_story)
+
+            # Update session state with uploaded user stories and features
+            st.session_state.test_case_generator = user_stories_features
+            st.success("Excel file uploaded and processed successfully!")
+        except Exception as e:
+            st.error(f"Error reading the Excel file: {e}")
+
+    # Display user stories and features
+    st.subheader("User Stories and Features")
+    if user_stories_features:
+        # Display each user story and feature
+        for story in user_stories_features:
+            st.write(story)
+    else:
+        st.info("No user stories and features found. Please upload an Excel file or go back to upload in the previous page.")
+
+    # Continue with generating test cases and saving to Excel
+    if user_stories_features:
+        # Text input for additional context
+        additional_context = st.text_area("Enter additional context for the user stories and features", key="additional_context")
+
+        # Trigger button to generate test cases
         if st.button('Generate Test Cases'):
+            # Prepare the system message with context
+            system_message = f"You are an assistant designed to create test cases on the following user stories and features:\n\n"
+            for story in user_stories_features:
+                system_message += f"'''{story}'''\n\n"
+            system_message += f"Additional Context: '''{additional_context}'''"
+
+            # Generate test cases using OpenAI
             try:
-                if upload_mode == "Excel User Stories":
-                    system_message = (
-                        "You are an assistant designed to create test cases on the following user stories and features:\n\n"
-                        + "\n\n".join(f"'''{story}'''" for story in st.session_state.test_case_generator)
-                        + f"\n\nAdditional Context: '''{additional_context}'''"
-                    )
-                elif upload_mode == "BRD PDF":
-                    brd_text = st.session_state.test_case_generator[0]
-                    with st.spinner("Embedding and retrieving relevant BRD sections..."):
-                        vectorstore = preprocess_brd_text_with_vectorstore(brd_text)
-                        relevant_brd = retrieve_relevant_brd_sections(
-                            vectorstore,
-                            query="Extract all user stories, features, and business rules required to generate UAT test cases."
-                        )
-                        #st.success(relevant_brd)
-                    system_message = (
-                        "You are a senior QA engineer. Generate a complete set of UAT test cases from the following BRD excerpts. "
-                        "Include positive, negative, and corner-case scenarios. Format output as:\n"
-                        "{ \"testCases\": [ { \"feature\": \"\", \"userStory\": \"\", \"testScenario\": \"\", \"testCaseTitle\": \"\", "
-                        "\"expectedResult\": \"\", \"testSteps\": \"1. Step one 2. Step two\" } ] }\n\n"
-                        f"BRD Extract:\n'''{relevant_brd}'''"
-                    )
-
-
                 if model_option == "gpt-4o":
                     completion = openai_client.chat.completions.create(
                         model="gpt-4o",
                         messages=[
                             {"role": "system", "content": system_message},
-                            {"role": "user", "content": "Generate the test cases."}
+                            {"role": "user", "content": "Generate test cases for the above user stories and features."}
                         ],
                         max_tokens=3000,
-                        temperature=0.8
+                        temperature=0.8,
+                        top_p=1.0,
+                        frequency_penalty=0.0,
+                        presence_penalty=0.0,
                     )
-                    response = completion.choices[0].message.content.strip()
+
+                    if completion and completion.choices:
+                        response = completion.choices[0].message.content.strip()
                 else:
+                    # Generate test case using Llama3
                     result = llm_llama.generate(
-                        prompts=[system_message + "\nGenerate the test cases."],
+                        prompts=[system_message + "\n" + "Generate test cases for the given user stories and features."],
                         max_tokens=3000,
-                        temperature=0.8
+                        temperature=0.8,
+                        top_p=1.0,
+                        frequency_penalty=0.0,
+                        presence_penalty=0.0,
                     )
                     response = result.generations[0][0].text.strip()
 
+                # Store the generated test cases in session state
                 st.session_state.generated_test_cases = response
+
+                # Display the generated test cases
                 st.subheader("Generated Test Cases")
                 st.write(response)
+
             except Exception as e:
                 st.error(f"Error generating test cases: {e}")
 
+        # Save generated test cases to Excel
         if st.button("Save to Excel"):
             try:
-                response = st.session_state.get("generated_test_cases")
-                if not response:
-                    st.warning("No generated test cases found.")
-                    return
+                # Check if the generated test cases exist in session state
+                if "generated_test_cases" in st.session_state:
+                    response = st.session_state.generated_test_cases
 
-                test_cases_json = extract_json(response)
-                if test_cases_json is None:
-                    return
+                    # Extract and parse the JSON response
+                    test_cases_json = extract_json(response)
+                    if test_cases_json is None:
+                        return
 
-                flattened_data = process_test_cases_json(test_cases_json)
-                df = pd.DataFrame(flattened_data)
+                    # Process the JSON data to flatten it
+                    flattened_data = process_test_cases_json(test_cases_json)
 
-                output = BytesIO()
-                df.to_excel(output, index=False)
-                output.seek(0)
-                st.download_button(label="📥 Download Excel", data=output, file_name="generated_test_cases.xlsx")
+                    # Create DataFrame
+                    df = pd.DataFrame(flattened_data)
+
+                    # Save to Excel
+                    file_path = os.path.join(os.path.expanduser("~"), "Downloads", "generated_test_cases.xlsx")
+                    df.to_excel(file_path, index=False)
+
+                    st.success(f"Generated test cases saved to Excel successfully! [Download here](file://{file_path})")
+                else:
+                    st.warning("No generated test cases found. Please generate test cases first.")
             except Exception as e:
-                st.error(f"Error saving to Excel: {e}")
+                st.error(f"Error saving generated test cases to Excel: {e}")
 
-# Run app
+# Run the app
 if __name__ == "__main__":
     test_case_generator2()

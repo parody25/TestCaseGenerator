@@ -1,0 +1,5 @@
+- The customer's age must be between 18 and 65.
+- Email must end with '@example.com'.
+- Account balance must be greater than 500 if account_status is 'active'.
+- Date of birth must be at least 18 years before today's date.
+- No two customers can share the same email.

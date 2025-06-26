@@ -1,0 +1,35 @@
+{
+    "name": "generate_test_data",
+    "description": "Generates test data with tables and metadata",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "object",
+          "description": "REQUIRED. The generated test data tables with records",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A record in the table"
+            }
+          }
+        },
+        "_metadata": {
+          "type": "object",
+          "description": "Generation metadata",
+          "properties": {
+            "generation_date": {"type": "string", "format": "date-time"},
+            "record_count": {"type": "integer"},
+            "edge_cases_included": {"type": "boolean"},
+            "data_quality_profile": {
+              "type": "string",
+              "enum": ["All Valid", "Mostly Valid", "Balanced", "Mostly Invalid", "All Invalid"]
+            }
+          },
+          "required": ["generation_date", "record_count"]
+        }
+      },
+      "required": ["tables"]
+    }
+  }

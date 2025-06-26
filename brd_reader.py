@@ -9,6 +9,8 @@ from llama_index.llms.openai import OpenAI as LlamaOpenAI
 from dotenv import load_dotenv
 import json
 import pandas as pd
+from io import BytesIO
+import tiktoken
 
 load_dotenv()
 
@@ -18,6 +20,88 @@ def load_json_file(file_path):
 
 TEST_CASE_SCHEMA = load_json_file('test_case_schema.json')
 EXAMPLE_TEST_CASE = load_json_file('example_test_case.json')
+
+def chunk_text(text, max_tokens=1500, model="gpt-4o"):
+    enc = tiktoken.encoding_for_model(model)
+    tokens = enc.encode(text)
+    chunks = []
+    start = 0
+    while start < len(tokens):
+        end = start + max_tokens
+        chunk = enc.decode(tokens[start:end])
+        chunks.append(chunk)
+        start = end
+    return chunks
+
+def generate_test_cases_from_chunks(context_chunks, llm_client, tool_schema):
+    all_test_cases = []
+    seen_titles = set()
+    llm_call_count = 0
+
+    for i, chunk in enumerate(context_chunks):
+        llm_call_count += 1
+        print(f"\n--- LLM Call #{llm_call_count} ---")
+        print(f"Context Chunk Passed:\n{chunk[:1000]}{'...' if len(chunk) > 1000 else ''}\n")
+
+        prompt = f"""
+You are a Senior QA Architect.
+
+Generate UAT test cases based on the BRD section below. Avoid repeating earlier test cases. Focus on:
+- Functional & non-functional requirements
+- Positive, negative, and edge cases
+- Grouped by feature/module
+- Generate atleast 20 test cases per chunk
+
+Avoid these test case titles: {list(seen_titles)[:20]}
+
+BRD Section:
+\"\"\"{chunk}\"\"\"
+"""
+        completion = llm_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a structured test case generation assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            tools=[{
+                "type": "function",
+                "function": tool_schema
+            }],
+            tool_choice={"type": "function", "function": {"name": "generate_test_cases"}},
+            temperature=0.3
+        )
+
+        try:
+            response_json = completion.choices[0].message.tool_calls[0].function.arguments
+            parsed_output = json.loads(response_json)
+            new_test_cases = []
+
+            for feature in parsed_output["test_suite"]["features"]:
+                unique_cases = []
+                for case in feature["test_cases"]:
+                    title = case["title"]
+                    if title not in seen_titles:
+                        seen_titles.add(title)
+                        unique_cases.append(case)
+                feature["test_cases"] = unique_cases
+                if unique_cases:
+                    new_test_cases.append(feature)
+
+            if new_test_cases:
+                all_test_cases.extend(new_test_cases)
+
+        except Exception as e:
+            print(f"Error processing chunk {i}: {e}")
+            continue
+
+    print(f"\n✅ Total LLM calls made: {llm_call_count}\n")
+    return {
+        "test_suite": {
+            "application_name": "BRD App",
+            "brd_reference": "Extracted",
+            "features": all_test_cases
+        }
+    }
 
 def brd_reader():
     st.title("📄 BRD-Based UAT Test Case Generator")
@@ -90,6 +174,7 @@ def brd_reader():
                         return
                     st.code(context[:2500] + "..." if len(context) > 2500 else context)
 
+                    chunks = chunk_text(context)
                     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
                     tool_schema = {
@@ -98,48 +183,11 @@ def brd_reader():
                         "parameters": TEST_CASE_SCHEMA
                     }
 
-                    prompt = f"""
-You are a Senior QA Architect.
-
-Generate at least 100 test cases covering:
-- Functional and non-functional requirements
-- Positive, negative, and edge cases
-- Grouped by feature/module
-- Traceable to BRD inputs
-
-Refer to this BRD content:
-\"\"\"{context}\"\"\"
-"""
-
-                    completion = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": "You are a structured test case generation assistant."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        tools=[{
-                            "type": "function",
-                            "function": tool_schema
-                        }],
-                        tool_choice={"type": "function", "function": {"name": "generate_test_cases"}},
-                        temperature=0.5
-                    )
-
-                    response_json = completion.choices[0].message.tool_calls[0].function.arguments
-                    parsed_output = json.loads(response_json)
+                    parsed_output = generate_test_cases_from_chunks(chunks, client, tool_schema)
 
                     st.subheader("✅ Generated UAT Test Cases")
                     st.code(json.dumps(parsed_output, indent=2), language="json")
 
-                    # JSON download button
-                    # st.download_button(
-                    #     label="⬇️ Download JSON",
-                    #     data=json.dumps(parsed_output, indent=2),
-                    #     file_name="uat_test_cases.json",
-                    #     mime="application/json"
-                    # )
-
-                    # Convert to DataFrame for Excel
                     excel_rows = []
                     suite = parsed_output["test_suite"]
                     for feature in suite["features"]:
@@ -162,13 +210,10 @@ Refer to this BRD content:
 
                     df = pd.DataFrame(excel_rows)
 
-                    # Save Excel to buffer
-                    from io import BytesIO
                     excel_buffer = BytesIO()
                     df.to_excel(excel_buffer, index=False, sheet_name="TestCases")
                     excel_buffer.seek(0)
 
-                    # Excel download button
                     st.download_button(
                         label="⬇️ Download Excel",
                         data=excel_buffer,
