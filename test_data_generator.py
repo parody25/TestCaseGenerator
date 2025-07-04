@@ -147,70 +147,78 @@ def generate_test_data(schema_info, record_count, include_edge_cases, data_quali
     #else:
         #raise ValueError("Unexpected function call response")
 
+
+def format_sql_value(value):
+    """Safely format values for SQL insert"""
+    if value is None:
+        return "NULL"
+    elif isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    elif isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    elif isinstance(value, (int, float)):
+        return str(value)
+    elif isinstance(value, (dict, list)):
+        # Convert nested dict/list to JSON string
+        return "'" + json.dumps(value).replace("'", "''") + "'"
+    else:
+        return "'" + str(value).replace("'", "''") + "'"
+
 def display_and_download_results(test_data, original_format):
     """Display results and provide download options"""
     st.success("✅ Test Data Generated Successfully!")
-    
-    with st.expander("📊 Preview Generated Data"):
+
+    # JSON Preview
+    with st.expander("📊 Preview Generated Data (JSON)"):
         st.json(test_data)
-    
-    col1, col2, col3 = st.columns(3)
+
+    sql_script = ""
+    if "tables" in test_data:
+        for table in test_data["tables"]:
+            table_name = table.get("table_name", "unnamed_table")
+            
+            # Try to get data from "data" key; if not found, fall back to "columns"
+            rows = table.get("data")
+            
+            # Heuristic: if "data" is missing but "columns" look like rows, use that
+            if not rows and isinstance(table.get("columns"), list):
+                first_col_item = table["columns"][0]
+                if isinstance(first_col_item, dict) and all(not isinstance(v, dict) for v in first_col_item.values()):
+                    rows = table["columns"]
+
+            if not rows:
+                print(f"⚠️ No usable rows found in table: {table_name}")
+                continue
+
+            print(f"✅ Generating SQL for table: {table_name}")
+            print("🔍 Sample row:", rows[0])
+
+            columns = rows[0].keys()
+            col_list = ", ".join(f"`{col}`" for col in columns)
+
+            for row in rows:
+                values = ", ".join(format_sql_value(row.get(col)) for col in columns)
+                sql_script += f"INSERT INTO `{table_name}` ({col_list}) VALUES ({values});\n"
+
+
+    # SQL Preview
+    with st.expander("📝 Preview SQL Script"):
+        st.code(sql_script or "-- No SQL generated", language="sql")
+
+    col1, col2 = st.columns(2)
 
     with col1:
         st.download_button(
-            label="Download as JSON",
+            label="⬇️ Download as JSON",
             data=json.dumps(test_data, indent=2),
             file_name="test_data.json",
             mime="application/json"
         )
 
     with col2:
-        if "tables" in test_data:
-            csv_data = {}
-            for table in test_data["tables"]:
-                table_name = table.get("table_name", "unnamed_table")
-                columns = table.get("columns", [])
-                df = pd.DataFrame(columns)
-                csv_data[table_name] = df.to_csv(index=False)
-
-            if csv_data:
-                if len(csv_data) == 1:
-                    st.download_button(
-                        label="Download as CSV",
-                        data=list(csv_data.values())[0],
-                        file_name="test_data.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        zip_path = os.path.join(tmpdir, "test_data.zip")
-                        with zipfile.ZipFile(zip_path, 'w') as zipf:
-                            for table_name, csv_content in csv_data.items():
-                                zipf.writestr(f"{table_name}.csv", csv_content)
-
-                        with open(zip_path, "rb") as f:
-                            st.download_button(
-                                label="Download as CSV (ZIP)",
-                                data=f,
-                                file_name="test_data.zip",
-                                mime="application/zip"
-                            )
-
-    with col3:
-        if original_format in ['xlsx']:
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                if "tables" in test_data:
-                    for table_name, table_data in test_data["tables"].items():
-                        if table_name != "_metadata":
-                            pd.DataFrame(table_data).to_excel(
-                                writer, 
-                                sheet_name=table_name[:31],
-                                index=False
-                            )
-            st.download_button(
-                label="Download as Excel",
-                data=output.getvalue(),
-                file_name="test_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        st.download_button(
+            label="⬇️ Download SQL Script",
+            data=sql_script,
+            file_name="test_data.sql",
+            mime="text/sql"
+        )
