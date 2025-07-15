@@ -79,15 +79,27 @@ Return a summary of:
         excel_file = st.file_uploader("Upload User Story Excel", type=["xlsx"])
         test_case_file = st.file_uploader("Upload Test Cases (Excel or JSON from Excel)", type=["json", "xlsx"])
 
+        sheet_name = None
+        if excel_file:
+            try:
+                xls = pd.ExcelFile(excel_file)
+                sheet_name = st.selectbox("Select sheet containing User Stories", xls.sheet_names)
+            except Exception as e:
+                st.error(f"Failed to read Excel file: {e}")
+
         if st.button("📊 Validate Coverage from Excel"):
-            if not excel_file or not test_case_file:
-                st.warning("Please upload both the user story Excel and the test case file.")
+            if not excel_file or not test_case_file or not sheet_name:
+                st.warning("Please upload both the user story Excel, select a sheet, and upload the test case file.")
                 return
 
             with st.spinner("Reading Excel and analyzing coverage..."):
                 try:
-                    df = pd.read_excel(excel_file)
-                    user_stories_text = "\n".join([f"{row['ID']}: {row['Description']}" for _, row in df.iterrows() if 'Description' in row])
+                    df = xls.parse(sheet_name)
+                    user_stories_text = "\n".join([
+                        f"{row['ID']}: {row['Description']}"
+                        for _, row in df.iterrows()
+                        if 'ID' in row and 'Description' in row and pd.notna(row['Description'])
+                    ])
 
                     if test_case_file.name.endswith(".json"):
                         test_case_data = json.load(test_case_file)
