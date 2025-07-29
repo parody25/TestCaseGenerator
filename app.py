@@ -4,6 +4,7 @@ from test_case_generator2 import test_case_generator2
 from test_data_generator import test_data_generator
 from automation_script import automation_script
 from test_coverage import test_coverage
+from mock_api_generator import mock_api_generator
 
 def show_logo():
     st.image("TCS_logo.png", width=200)
@@ -11,7 +12,7 @@ def show_logo():
 st.set_page_config(layout="wide")
 st.sidebar.title("Navigation")
 #selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪", "Test Case Generator 2 🧪🧪"])
-selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪", "BRD Reader 🧪🧪", "Test Data Generator", "Automation Script", "Coverage Validator"])
+selection = st.sidebar.radio("Go to", ["Welcome 🏠", "Test Case Generator 🧪", "BRD Reader 🧪🧪", "Test Data Generator", "Automation Script", "Coverage Validator", "Mock API Generator"])
 # Navigation logic
 if selection == "Welcome 🏠":
     show_logo()  # 👈 Add this
@@ -37,5 +38,7 @@ elif selection == "Automation Script":
     automation_script()
 elif selection == "Coverage Validator":
     test_coverage()
+elif selection == "Mock API Generator":
+    mock_api_generator()
 
 
