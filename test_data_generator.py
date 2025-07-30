@@ -329,39 +329,60 @@ def generate_create_table(table_name, columns_def):
     return create_sql
 
 def display_and_download_results(test_data, original_format):
-    """Display results and provide download options"""
+    """Display results and provide single zip download with Excel and SQL"""
     st.success("✅ Test Data Generated Successfully!")
 
-    # JSON Preview
+    # Preview JSON
     with st.expander("📊 Preview Generated Data (JSON)"):
         st.json(test_data)
 
     try:
         sql_script = generate_sql_from_test_data(test_data)
-        
-        # SQL Preview with debug info
+
         with st.expander("📝 Preview SQL Script"):
-            if "-- No usable rows found in any format" in sql_script:
-                st.warning("No data was found for some tables. Check the debug information below.")
             st.code(sql_script, language="sql")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button(
-                label="⬇️ Download as JSON",
-                data=json.dumps(test_data, indent=2),
-                file_name="test_data.json",
-                mime="application/json"
-            )
-        with col2:
-            st.download_button(
-                label="⬇️ Download SQL Script",
-                data=sql_script,
-                file_name="test_data.sql",
-                mime="text/sql"
-            )
-            
+        # Create Excel in memory
+        excel_buffer = BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            # Support both single-table and multi-table structures
+            if "tables" in test_data and isinstance(test_data["tables"], dict):
+                for table_name, table_data in test_data["tables"].items():
+                    if isinstance(table_data, dict) and "data" in table_data:
+                        df = pd.DataFrame(table_data["data"])
+                    elif isinstance(table_data, dict):
+                        df = pd.DataFrame.from_dict(table_data)
+                    else:
+                        df = pd.DataFrame(table_data)
+                    df.to_excel(writer, sheet_name=table_name[:31], index=False)
+            elif "data" in test_data:
+                df = pd.DataFrame(test_data["data"])
+                table_name = test_data.get("schema", {}).get("table_name", "TestData")
+                df.to_excel(writer, sheet_name=table_name[:31], index=False)
+            else:
+                # Fallback
+                df = pd.DataFrame(test_data)
+                df.to_excel(writer, sheet_name="Data", index=False)
+
+        excel_buffer.seek(0)
+
+        # Create ZIP with Excel + SQL
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr("test_data.sql", sql_script)
+            zipf.writestr("test_data.xlsx", excel_buffer.getvalue())
+
+        zip_buffer.seek(0)
+
+        # Single download button for combined file
+        st.download_button(
+            label="⬇️ Download All (Excel + SQL in ZIP)",
+            data=zip_buffer,
+            file_name="generated_test_data.zip",
+            mime="application/zip"
+        )
+
     except Exception as e:
-        st.error(f"Error processing results: {str(e)}")
-        st.error(f"Problem occurred with data structure: {str(test_data)[:500]}...")
+        st.error(f"Error preparing download: {str(e)}")
+        st.error(f"Partial data structure: {str(test_data)[:500]}...")
         st.stop()
