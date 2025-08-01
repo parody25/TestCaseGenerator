@@ -6,6 +6,7 @@ import pandas as pd
 import json
 from io import BytesIO
 import re
+import time
 from langchain.llms import Ollama
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -128,6 +129,7 @@ def test_case_generator2():
 
         # Trigger button to generate test cases
         if st.button('Generate Test Cases'):
+            start_time = time.time()
             # Prepare the system message with context
             system_message = f"You are an assistant designed to create test cases on the following user stories and features:\n\n"
             for story in user_stories_features:
@@ -163,13 +165,15 @@ def test_case_generator2():
                         presence_penalty=0.0,
                     )
                     response = result.generations[0][0].text.strip()
-
+                end_time = time.time()
+                elapsed_time = round(end_time - start_time, 2)
                 # Store the generated test cases in session state
                 st.session_state.generated_test_cases = response
 
                 # Display the generated test cases
                 st.subheader("Generated Test Cases")
                 st.write(response)
+                st.success(f"Test cases generated in {elapsed_time} seconds.")
 
             except Exception as e:
                 st.error(f"Error generating test cases: {e}")
